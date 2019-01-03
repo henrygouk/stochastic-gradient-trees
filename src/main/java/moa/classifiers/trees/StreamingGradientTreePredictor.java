@@ -61,6 +61,11 @@ public class StreamingGradientTreePredictor extends AbstractClassifier implement
         mInstances = 0;
     }
 
+    @Override
+    public int measureByteSize() {
+        return 0;
+    }
+
     public void trainOnInstanceImpl(Instance inst) {
         mInstances++;
 
