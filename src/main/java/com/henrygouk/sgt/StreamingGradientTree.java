@@ -18,11 +18,19 @@ public class StreamingGradientTree implements Serializable {
     protected int mNumNodeUpdates;
 
     protected int mNumSplits;
+
+    protected int mMaxDepth;
     
     public StreamingGradientTree(FeatureInfo[] featureInfo, StreamingGradientTreeOptions options) {
         mFeatureInfo = featureInfo.clone();
-        mRoot = new Node(options.initialPrediction);
         mOptions = options;
+        boolean[] hasSplit = new boolean[mFeatureInfo.length];
+
+        for(int i = 0; i < hasSplit.length; i++) {
+            hasSplit[i] = false;
+        }
+
+        mRoot = new Node(options.initialPrediction, 1, hasSplit);
     }
 
     public int getNumNodes() {
@@ -38,22 +46,7 @@ public class StreamingGradientTree implements Serializable {
     }
 
     public int getDepth() {
-        return computeTreeDepth(mRoot);
-    }
-
-    private int computeTreeDepth(Node root) {
-        if(root.mChildren == null) {
-            return 1;
-        }
-        else {
-            int maxSubtreeDepth = 0;
-
-            for(int i = 0; i < root.mChildren.length; i++) {
-                maxSubtreeDepth = Math.max(maxSubtreeDepth, computeTreeDepth(root.mChildren[i]));
-            }
-
-            return maxSubtreeDepth + 1;
-        }
+        return mMaxDepth;
     }
 
     public void randomlyInitialize(Random rng, double predBound) {
@@ -62,20 +55,26 @@ public class StreamingGradientTree implements Serializable {
         mRoot.mSplit.feature = fid;
         mNumSplits++;
 
+        boolean[] hasSplit = new boolean[mFeatureInfo.length];
+
+        for(int i = 0; i < hasSplit.length; i++) {
+            hasSplit[i] = false;
+        }
+
         // If nominal
         if(mFeatureInfo[fid].type == FeatureType.nominal) {
             mRoot.mChildren = new Node[mFeatureInfo[fid].categories];
 
             for(int i = 0; i < mRoot.mChildren.length; i++) {
-                mRoot.mChildren[i] = new Node(predBound * (2.0 * rng.nextDouble() - 1.0));
+                mRoot.mChildren[i] = new Node(predBound * (2.0 * rng.nextDouble() - 1.0), 2, hasSplit);
             }
         }
         else if(mFeatureInfo[fid].type == FeatureType.ordinal) {
-            mRoot.mSplit.index = rng.nextInt(mFeatureInfo[fid].categories / 4) + 3 * mFeatureInfo[fid].categories / 8;
+            mRoot.mSplit.index = rng.nextInt(mFeatureInfo[fid].categories / 2) + mFeatureInfo[fid].categories / 4;
 
             mRoot.mChildren = new Node[2];
-            mRoot.mChildren[0] = new Node(predBound * (2.0 * rng.nextDouble() - 1.0));
-            mRoot.mChildren[1] = new Node(predBound * (2.0 * rng.nextDouble() - 1.0));
+            mRoot.mChildren[0] = new Node(predBound * (2.0 * rng.nextDouble() - 1.0), 2, hasSplit);
+            mRoot.mChildren[1] = new Node(predBound * (2.0 * rng.nextDouble() - 1.0), 2, hasSplit);
         }
     }
 
@@ -144,10 +143,17 @@ public class StreamingGradientTree implements Serializable {
         protected GradHessStats mUpdateStats;
 
         protected GradHessStats[][] mSplitStats;
+
+        protected int mDepth;
+
+        protected boolean[] mHasSplit;
         
-        public Node(double prediction) {
+        public Node(double prediction, int depth, boolean[] hasSplit) {
             mPrediction = prediction;
             mNumNodes++;
+            mDepth = depth;
+            mMaxDepth = Math.max(mMaxDepth, mDepth);
+            mHasSplit = hasSplit.clone();
 
             reset();
         }
@@ -230,6 +236,10 @@ public class StreamingGradientTree implements Serializable {
                 candidate.feature = i;
 
                 if(mFeatureInfo[i].type == FeatureType.nominal) {
+                    if(mHasSplit[i]) {
+                        continue;
+                    }
+
                     candidate.deltaPredictions = new double[mSplitStats[i].length];
                     double lossMean = 0.0;
                     double lossVar = 0.0;
@@ -247,7 +257,7 @@ public class StreamingGradientTree implements Serializable {
                         observations += n;
                     }
 
-                    candidate.lossMean = lossMean;
+                    candidate.lossMean = lossMean + mSplitStats[i].length * mOptions.gamma / mInstances;
                     candidate.lossVariance = lossVar;
                 }
                 else if(mFeatureInfo[i].type == FeatureType.ordinal) {
@@ -291,7 +301,7 @@ public class StreamingGradientTree implements Serializable {
                         double lossVar = GradHessStats.combineVariance(lossMeanLeft, lossVarLeft, numLeft, lossMeanRight, lossVarRight, numRight);
 
                         if(lossMean < candidate.lossMean) {
-                            candidate.lossMean = lossMean;
+                            candidate.lossMean = lossMean + 2.0 * mOptions.gamma / mInstances;
                             candidate.lossVariance = lossVar;
                             candidate.index = j;
                             candidate.deltaPredictions[0] = deltaPredLeft;
@@ -302,8 +312,6 @@ public class StreamingGradientTree implements Serializable {
                 else {
                     System.err.println("Unhandled attribute type");
                 }
-
-                candidate.lossMean += mOptions.gamma / mInstances;
 
                 if(candidate.lossMean < best.lossMean) {
                     best = candidate;
@@ -325,19 +333,20 @@ public class StreamingGradientTree implements Serializable {
 
             mSplit = split;
             mNumSplits++;
+            mHasSplit[split.feature] = true;
             
             if(mFeatureInfo[split.feature].type == FeatureType.nominal) {
                 mChildren = new Node[mFeatureInfo[split.feature].categories];
 
                 for(int i = 0; i < mChildren.length; i++) {
-                    mChildren[i] = new Node(mPrediction + split.deltaPredictions[i]);
+                    mChildren[i] = new Node(mPrediction + split.deltaPredictions[i], mDepth + 1, mHasSplit);
                 }
             }
             else if(mFeatureInfo[split.feature].type == FeatureType.ordinal) {
                 mChildren = new Node[2];
 
-                mChildren[0] = new Node(mPrediction + split.deltaPredictions[0]);
-                mChildren[1] = new Node(mPrediction + split.deltaPredictions[1]);
+                mChildren[0] = new Node(mPrediction + split.deltaPredictions[0], mDepth + 1, mHasSplit);
+                mChildren[1] = new Node(mPrediction + split.deltaPredictions[1], mDepth + 1, mHasSplit);
             }
             else {
                 System.err.println("Unhandled attribute type");
