@@ -2,6 +2,7 @@ package com.henrygouk.sgt;
 
 import java.io.Serializable;
 import java.util.Random;
+import java.util.stream.IntStream;
 
 public class StreamingGradientTreeCommittee implements Serializable {
 
@@ -66,18 +67,15 @@ public class StreamingGradientTreeCommittee implements Serializable {
     }
 
     public void update(int[] features, GradHess[] gradHesses) {
-        for(int i = 0; i < mTrees.length; i++) {
-            mTrees[i].update(features, gradHesses[i]);
-        }
+        IntStream.range(0, mTrees.length)
+                 .parallel()
+                 .forEach(i -> mTrees[i].update(features, gradHesses[i]));
     }
 
     public double[] predict(int[] features) {
-        double[] result = new double[mTrees.length];
-
-        for(int i = 0; i < mTrees.length; i++) {
-            result[i] = mTrees[i].predict(features);
-        }
-
-        return result;
+        return IntStream.range(0, mTrees.length)
+                        .parallel()
+                        .mapToDouble(i -> mTrees[i].predict(features))
+                        .toArray();
     }
 }
