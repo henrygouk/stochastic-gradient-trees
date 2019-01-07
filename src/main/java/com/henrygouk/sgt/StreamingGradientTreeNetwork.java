@@ -4,13 +4,17 @@ import java.io.Serializable;
 import java.util.Random;
 import java.util.stream.IntStream;
 
-public class StreamingGradientTreeCommittee implements Serializable, MultiOutputLearner {
+import com.henrygouk.sgt.neural.Layer;
 
-    private static final long serialVersionUID = 8961897277670201943L;
+public class StreamingGradientTreeNetwork implements Serializable, MultiOutputLearner {
+
+    private static final long serialVersionUID = -512245313461494205L;
     protected StreamingGradientTree[] mTrees;
+    protected Layer[] mLayers;
 
-    public StreamingGradientTreeCommittee(FeatureInfo[] featureInfo, StreamingGradientTreeOptions options, int numTrees) {
+    public StreamingGradientTreeNetwork(FeatureInfo[] featureInfo, StreamingGradientTreeOptions options, int numTrees, Layer[] layers) {
         mTrees = new StreamingGradientTree[numTrees];
+        mLayers = layers;
         
         for(int i = 0; i < mTrees.length; i++) {
             mTrees[i] = new StreamingGradientTree(featureInfo, options);
@@ -68,15 +72,38 @@ public class StreamingGradientTreeCommittee implements Serializable, MultiOutput
     }
 
     public void update(int[] features, GradHess[] gradHesses) {
+        double[][] activations = new double[mLayers.length + 1][];
+        activations[0] = IntStream.range(0, mTrees.length)
+                                  .parallel()
+                                  .mapToDouble(i -> mTrees[i].predict(features))
+                                  .toArray();
+        
+        for(int i = 0; i < mLayers.length; i++) {
+            activations[i + 1] = mLayers[i].predict(activations[i]);
+        }
+
+        for(int i = mLayers.length - 1; i >= 0; i--) {
+            gradHesses = mLayers[i].update(activations[i], gradHesses);
+        }
+
+        final GradHess[] finalGradHesses = gradHesses;
+
         IntStream.range(0, mTrees.length)
                  .parallel()
-                 .forEach(i -> mTrees[i].update(features, gradHesses[i]));
+                 .forEach(i -> mTrees[i].update(features, finalGradHesses[i]));
     }
 
     public double[] predict(int[] features) {
-        return IntStream.range(0, mTrees.length)
-                        .parallel()
-                        .mapToDouble(i -> mTrees[i].predict(features))
-                        .toArray();
+        double[][] activations = new double[mLayers.length + 1][];
+        activations[0] = IntStream.range(0, mTrees.length)
+                                  .parallel()
+                                  .mapToDouble(i -> mTrees[i].predict(features))
+                                  .toArray();
+        
+        for(int i = 0; i < mLayers.length; i++) {
+            activations[i + 1] = mLayers[i].predict(activations[i]);
+        }
+
+        return activations[activations.length - 1];
     }
 }
