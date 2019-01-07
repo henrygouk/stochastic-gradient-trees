@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 
 import com.henrygouk.sgt.*;
+import com.henrygouk.sgt.neural.*;
 
 import java.util.Random;
 import java.util.Vector;
@@ -16,6 +17,7 @@ import weka.core.Instances;
 import weka.core.Utils;
 import weka.experiment.Stats;
 import weka.filters.SimpleBatchFilter;
+import weka.gui.GenericObjectEditor;
 
 public class StreamingGradientTreeEmbedder extends SimpleBatchFilter implements Serializable {
 
@@ -33,11 +35,23 @@ public class StreamingGradientTreeEmbedder extends SimpleBatchFilter implements 
 
     protected int mEpochs = 20;
 
+    protected Layer[] mLayers = {
+        new FullyConnected(32, 32, 200, 0.001, 0.9, 0.999, 1e-8),
+        new RectifiedLinearUnit(),
+        new FullyConnected(32, 32, 200, 0.001, 0.9, 0.999, 1e-8)
+    };
+
     protected double[] mMin;
 
     protected double[] mMax;
 
-    protected StreamingGradientTreeCommittee mTrees;
+    protected MultiOutputLearner mTrees;
+
+    static
+    {
+        GenericObjectEditor.registerEditor("com.henrygouk.sgt.neural.Layer", "weka.gui.GenericObjectEditor");
+        GenericObjectEditor.registerEditor("com.henrygouk.sgt.neural.Layer[]", "weka.gui.GenericArrayEditor");
+    }
 
     public int getDimensions() {
         return mDimensions;
@@ -87,6 +101,14 @@ public class StreamingGradientTreeEmbedder extends SimpleBatchFilter implements 
         mBins = bins;
     }
 
+    public Layer[] getLayers() {
+        return mLayers;
+    }
+
+    public void setLayers(Layer... v) {
+        mLayers = v;
+    }
+
     public String[] getOptions() {
         Vector<String> options = new Vector<String>();
 
@@ -97,7 +119,7 @@ public class StreamingGradientTreeEmbedder extends SimpleBatchFilter implements 
         options.add(Integer.toString(getEpochs()));
 
         options.add("-G");
-        options.add(Integer.toBinaryString(getGracePeriod()));
+        options.add(Integer.toString(getGracePeriod()));
 
         options.add("-L");
         options.add(Double.toString(getLambda()));
@@ -174,7 +196,13 @@ public class StreamingGradientTreeEmbedder extends SimpleBatchFilter implements 
         options.lambda = mLambda;
         options.gamma = mGamma;
 
-        mTrees = new StreamingGradientTreeCommittee(featureInfo, options, mDimensions);
+        if(mLayers.length > 0 && !(mLayers.length == 1 && mLayers[0] instanceof Identity)) {
+            mTrees = new StreamingGradientTreeNetwork(featureInfo, options, 32, mLayers);
+        }
+        else {
+            mTrees = new StreamingGradientTreeCommittee(featureInfo, options, mDimensions);
+        }
+
         mTrees.randomlyInitialize(rng, Math.sqrt(1.0 / mDimensions));
 
         int pairs = instances.numInstances() * mEpochs;
