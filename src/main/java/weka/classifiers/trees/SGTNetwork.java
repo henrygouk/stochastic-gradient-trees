@@ -11,6 +11,8 @@ import weka.core.Attribute;
 import weka.core.Instance;
 import weka.core.Instances;
 import weka.experiment.Stats;
+import weka.filters.Filter;
+import weka.filters.unsupervised.attribute.Discretize;
 
 public class SGTNetwork extends AbstractClassifier {
 
@@ -28,6 +30,7 @@ public class SGTNetwork extends AbstractClassifier {
     protected double mEpsilon = 1E-8;
     protected int mEpochs = 30;
     protected Objective mObjective;
+    protected Discretize mDiscretize;
 
     public int getEpochs() {
         return mEpochs;
@@ -83,10 +86,8 @@ public class SGTNetwork extends AbstractClassifier {
         return mObjective.transfer(pred);
     }
     
-    private FeatureInfo[] createFeatureInfo(Instances insts) {
+    private FeatureInfo[] createFeatureInfo(Instances insts) throws Exception {
         FeatureInfo[] featureInfo = new FeatureInfo[insts.numAttributes() - 1];
-        mMax = new double[featureInfo.length];
-        mMin = new double[featureInfo.length];
         int i = 0;
 
         for(int attInd = 0; attInd < insts.numAttributes(); attInd++) {
@@ -103,18 +104,25 @@ public class SGTNetwork extends AbstractClassifier {
             else if(insts.attribute(attInd).isNumeric()) {
                 featureInfo[i].type = FeatureType.ordinal;
                 featureInfo[i].categories = mBins;
-                Stats stats = insts.attributeStats(attInd).numericStats;
-                mMin[i] = stats.min;
-                mMax[i] = stats.max;
             }
 
             i++;
         }
 
+        mDiscretize = new Discretize();
+        mDiscretize.setUseEqualFrequency(true);
+        mDiscretize.setBins(mBins);
+        mDiscretize.setInputFormat(insts);
+        Filter.useFilter(insts, mDiscretize);
+
         return featureInfo;
     }
 
     private int[] getFeatures(Instance inst) {
+        mDiscretize.input(inst);
+        mDiscretize.batchFinished();
+        inst = mDiscretize.output();
+        
         int[] features = new int[inst.numAttributes() - 1];
 
         int i = 0;
@@ -129,16 +137,6 @@ public class SGTNetwork extends AbstractClassifier {
             }
             else if(inst.attribute(attInd).isNominal()) {
                 features[i] = (int)inst.value(attInd);
-            }
-            else {
-                features[i] = (int)((double)mBins * ((inst.value(attInd) - mMin[i]) / (mMax[i] - mMin[i])));
-
-                if(features[i] < 0) {
-                    features[i] = 0;
-                }
-                else if(features[i] >= mBins) {
-                    features[i] = mBins - 1;
-                }
             }
 
             i++;

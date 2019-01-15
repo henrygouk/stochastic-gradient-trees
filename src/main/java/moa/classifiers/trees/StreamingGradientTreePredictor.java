@@ -18,7 +18,7 @@ public class StreamingGradientTreePredictor extends AbstractClassifier implement
 
     private static final long serialVersionUID = 1L;
 
-    protected StreamingGradientTreeCommittee mTrees;
+    protected MultiOutputLearner mTrees;
 
     protected AttributeDiscretizer mDiscretizer;
 
@@ -66,6 +66,10 @@ public class StreamingGradientTreePredictor extends AbstractClassifier implement
         return 0;
     }
 
+    protected MultiOutputLearner createTrees(FeatureInfo[] featureInfo, StreamingGradientTreeOptions options, int numOutputs) {
+        return new StreamingGradientTreeCommittee(featureInfo, options, numOutputs);
+    }
+
     public void trainOnInstanceImpl(Instance inst) {
         mInstances++;
 
@@ -85,11 +89,11 @@ public class StreamingGradientTreePredictor extends AbstractClassifier implement
             options.gamma = gamma.getValue();
 
             if(target.isNominal()) {
-                mTrees = new StreamingGradientTreeCommittee(featureInfo, options, target.numValues() - 1);
+                mTrees = createTrees(featureInfo, options, target.numValues() - 1);
                 mObjective = new SoftmaxCrossEntropy();
             }
             else {
-                mTrees = new StreamingGradientTreeCommittee(featureInfo, options, 1);
+                mTrees = createTrees(featureInfo, options, 1);
                 mObjective = new SquaredError();
             }
         }
