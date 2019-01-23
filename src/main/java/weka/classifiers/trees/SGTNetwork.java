@@ -17,20 +17,21 @@ import weka.filters.unsupervised.attribute.Discretize;
 public class SGTNetwork extends AbstractClassifier {
 
     private static final long serialVersionUID = 3601534653937503693L;
-    protected double[] mMax;
-    protected double[] mMin;
     protected int mBins = 64;
     protected StreamingGradientTreeNetwork mNetwork;
     protected int mNumTrees = 100;
     protected int mNumHidden = 100;
-    protected int mBatchSize = 200;
+    protected int mBatchSize = 100;
     protected double mLearningRate = 0.001;
     protected double mBeta1 = 0.9;
     protected double mBeta2 = 0.999;
     protected double mEpsilon = 1E-8;
-    protected int mEpochs = 30;
+    protected int mEpochs = 20;
     protected Objective mObjective;
     protected Discretize mDiscretize;
+    protected double mLambda = 0.1;
+    protected double mGamma = 1.0;
+    protected Stats mTargetStats;
 
     public int getEpochs() {
         return mEpochs;
@@ -40,36 +41,77 @@ public class SGTNetwork extends AbstractClassifier {
         mEpochs = epochs;
     }
 
+    public void setBins(int bins) {
+        mBins = bins;
+    }
+
+    public int getBins() {
+        return mBins;
+    }
+
+    public void setTrainBatchSize(int bs) {
+        mBatchSize = bs;
+    }
+
+    public int getTrainBatchSize() {
+        return mBatchSize;
+    }
+
+    public void setLambda(double l) {
+        mLambda = l;
+    }
+
+    public double getLambda() {
+        return mLambda;
+    }
+
+    public void setGamma(double l) {
+        mGamma = l;
+    }
+
+    public double getGamma() {
+        return mGamma;
+    }
+
     @Override
     public void buildClassifier(Instances data) throws Exception {
         FeatureInfo[] featureInfo = createFeatureInfo(data);
         Attribute target = data.classAttribute();
+        mTargetStats = data.attributeStats(data.classIndex()).numericStats;
 
         Layer[] layers = new Layer[] {
             new FullyConnected(mNumTrees, mNumHidden, mBatchSize, mLearningRate, mBeta1, mBeta2, mEpsilon),
             new RectifiedLinearUnit(),
             new FullyConnected(mNumTrees, mNumHidden, mBatchSize, mLearningRate, mBeta1, mBeta2, mEpsilon),
             new RectifiedLinearUnit(),
-            new FullyConnected(mNumHidden, target.numValues() - 1, mBatchSize, mLearningRate, mBeta1, mBeta2, mEpsilon)
+            new FullyConnected(mNumHidden, target.isNominal() ? (target.numValues() - 1) : 1, mBatchSize, mLearningRate, mBeta1, mBeta2, mEpsilon)
         };
 
         StreamingGradientTreeOptions options = new StreamingGradientTreeOptions();
         options.gracePeriod = mBatchSize;
-        options.lambda = 0.1;
-        options.gamma = 1.0;
+        options.lambda = mLambda;
+        options.gamma = mGamma;
 
         mNetwork = new StreamingGradientTreeNetwork(featureInfo, options, mNumTrees, layers);
         mNetwork.randomlyInitialize(new Random(), 1.0 / Math.sqrt(mNumTrees));
-        mObjective = new SoftmaxCrossEntropy();
+        mObjective = target.isNominal() ? new SoftmaxCrossEntropy() : new SquaredError();
 
         for(int e = 0; e < mEpochs; e++) {
             for(int i = 0; i < data.numInstances(); i++) {
                 int[] features = getFeatures(data.instance(i));
 
                 double[] pred = mNetwork.predict(features);
-                double[] groundTruth = new double[target.numValues()];
-                groundTruth = new double[target.numValues()];
-                groundTruth[(int)data.instance(i).classValue()] = 1.0;
+                double[] groundTruth;
+                
+                if(target.isNominal()) {
+                    groundTruth = new double[target.numValues()];
+                    groundTruth = new double[target.numValues()];
+                    groundTruth[(int)data.instance(i).classValue()] = 1.0;
+                }
+                else {
+                    groundTruth = new double[1];
+                    groundTruth[0] = (data.instance(i).classValue() - mTargetStats.mean) / mTargetStats.stdDev;
+                }
 
                 GradHess[] gradHess = mObjective.computeDerivatives(groundTruth, pred);
 
@@ -82,6 +124,7 @@ public class SGTNetwork extends AbstractClassifier {
     public double[] distributionForInstance(Instance inst) {
         int[] features = getFeatures(inst);
         double[] pred = mNetwork.predict(features);
+        pred[0] = pred[0] * mTargetStats.stdDev + mTargetStats.mean;
 
         return mObjective.transfer(pred);
     }

@@ -20,6 +20,7 @@ repositories {
 dependencies {
     compile "nz.ac.waikato.cms.weka:weka-stable:3.8.2"
     compile "nz.ac.waikato.cms.moa:moa:2018.6.0"
+    compile "net.sf.meka:meka:1.9.2"
 
     // Use JUnit test framework
     testImplementation 'junit:junit:4.12'
