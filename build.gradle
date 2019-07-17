@@ -8,7 +8,7 @@
 
 apply plugin: "application"
 
-mainClassName = "moa.gui.GUI"
+mainClassName = "weka.gui.GUIChooser"
 
 repositories {
     // Use jcenter for resolving your dependencies.
@@ -19,7 +19,7 @@ repositories {
 
 dependencies {
     compile "nz.ac.waikato.cms.weka:weka-stable:3.8.2"
-    compile "nz.ac.waikato.cms.moa:moa:2018.6.0"
+    compile "nz.ac.waikato.cms.moa:moa:2019.05.0"
     compile "net.sf.meka:meka:1.9.2"
 
     // Use JUnit test framework
@@ -29,4 +29,8 @@ dependencies {
 test {
     dependsOn cleanTest
     testLogging.showStandardStreams = true
+}
+
+tasks.withType(JavaExec) {
+    jvmArgs = ['-Xmx24G']
 }

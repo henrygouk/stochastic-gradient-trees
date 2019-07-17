@@ -11,10 +11,11 @@ import com.yahoo.labs.samoa.instances.Instance;
 import moa.classifiers.AbstractClassifier;
 import moa.classifiers.MultiClassClassifier;
 import moa.classifiers.Regressor;
+import moa.classifiers.SemiSupervisedLearner;
 import moa.classifiers.trees.sgt.*;
 import moa.core.Measurement;
 
-public class StreamingGradientTreePredictor extends AbstractClassifier implements Serializable, MultiClassClassifier, Regressor {
+public class StreamingGradientTreePredictor extends AbstractClassifier implements Serializable, MultiClassClassifier, Regressor, SemiSupervisedLearner {
 
     private static final long serialVersionUID = 1L;
 
@@ -43,6 +44,9 @@ public class StreamingGradientTreePredictor extends AbstractClassifier implement
 
     public IntOption bins = new IntOption("bins", 'B',
         "The number of bins to be used for discretizing numeric attributes.", 64, 0, Integer.MAX_VALUE);
+
+    public FloatOption semiSupervisedOption = new FloatOption("enableSemiSupervised", 'U',
+        "Enables learning from unlabelled instances", 0.0, 0.0, 1.0);
 
     @Override
     public String getPurposeString() {
@@ -103,8 +107,21 @@ public class StreamingGradientTreePredictor extends AbstractClassifier implement
         double[] raw = mTrees.predict(features);
 
         if(target.isNominal()) {
-            groundTruth = new double[target.numValues()];
-            groundTruth[(int)inst.classValue()] = 1.0;
+            if(!inst.classIsMissing()) {
+                groundTruth = new double[target.numValues()];
+                groundTruth[(int)inst.classValue()] = 1.0;
+            }
+            else if(semiSupervisedOption.getValue() > 0.0) {
+                //This is equivalent to entropy minimisation when mObjective is the SoftmaxCrossEntropy objective
+                groundTruth = mObjective.transfer(raw);
+
+                for(int j = 0; j < groundTruth.length; j++) {
+                    groundTruth[j] *= semiSupervisedOption.getValue();
+                }
+            }
+            else {
+                return;
+            }
         }
         else {
             groundTruth = new double[] {inst.classValue()};
@@ -137,10 +154,18 @@ public class StreamingGradientTreePredictor extends AbstractClassifier implement
 
     @Override
     public Measurement[] getModelMeasurementsImpl() {
-        double nodes = mTrees.getNumNodes();
-        double splits = mTrees.getNumSplits();
-        double updates = mTrees.getNumNodeUpdates();
-        double maxDepth = mTrees.getMaxDepth();
+        
+        double nodes = 0.0;
+        double splits = 0.0;
+        double updates = 0.0;
+        double maxDepth = 0.0;
+
+        if(mTrees != null) {
+            nodes = mTrees.getNumNodes();
+            splits = mTrees.getNumSplits();
+            updates = mTrees.getNumNodeUpdates();
+            maxDepth = mTrees.getMaxDepth();
+        }
 
         return new Measurement[] {
             new Measurement("nodes", nodes),
