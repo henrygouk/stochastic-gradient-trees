@@ -109,8 +109,8 @@ public class StreamingGradientTree implements Serializable {
             return Statistics.FProbability(F, 1, instances - 1);
         }
         catch(ArithmeticException e) {
-            System.err.println(e.getMessage());
-            System.err.println(split.lossMean + " " + split.lossVariance);
+            //System.err.println(e.getMessage());
+            //System.err.println(split.lossMean + " " + split.lossVariance);
 
             return 1.0;
         }

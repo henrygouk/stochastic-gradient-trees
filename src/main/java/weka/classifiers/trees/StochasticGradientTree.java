@@ -77,7 +77,23 @@ public class StochasticGradientTree extends AbstractClassifier {
     }
 
     private void buildPropositionalClassifier(Instances data) throws Exception {
-        //
+        mFeatureInfo = createFeatureInfo(data);
+        mObjective = new SoftmaxCrossEntropy();
+        StreamingGradientTreeOptions options = new StreamingGradientTreeOptions();
+        options.gracePeriod = mBatchSize;
+        options.lambda = mLambda;
+        options.gamma = mGamma;
+
+        mTree = new StreamingGradientTree(mFeatureInfo, options);
+
+        for(int e = 0; e < mEpochs; e++) {
+            for(int i = 0; i < data.numInstances(); i++) {
+                double[] pred = new double[]{mTree.predict(getFeatures(data.instance(i)))};
+                double[] target = new double[]{data.instance(i).classValue()};
+                GradHess[] gradHess = mObjective.computeDerivatives(target, pred);
+                mTree.update(getFeatures(data.instance(i)), gradHess[0]);
+            }
+        }
     }
 
     private void buildMultiInstanceClassifier(Instances data) throws Exception {
@@ -151,7 +167,9 @@ public class StochasticGradientTree extends AbstractClassifier {
             return new double[]{pred[1], pred[0]};
         }
         else {
-            return null;
+            double[] logit = new double[]{mTree.predict(getFeatures(inst))};
+            double[] pred = mObjective.transfer(logit);
+            return new double[]{pred[1], pred[0]};
         }
     }
     
