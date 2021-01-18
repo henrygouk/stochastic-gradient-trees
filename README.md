@@ -1,7 +1,17 @@
 Stochastic Gradient Trees
 =========================
 
-This repo contains an implementation of the techniques described in the paper [Stochastic Gradient Trees](https://arxiv.org/abs/1901.07777) by Henry Gouk, Bernhard Pfahringer, and Eibe Frank, and presented at ACML 2019.
+This repo contains an implementation of the techniques described in the paper [Stochastic Gradient Trees](https://arxiv.org/abs/1901.07777) by Henry Gouk, Bernhard Pfahringer, and Eibe Frank, and presented at ACML 2019. If you build on this work in your research please cite
+
+```
+@inproceedings{gouk2019stochastic,
+  title={Stochastic Gradient Trees},
+  author={Gouk, Henry and Pfahringer, Bernhard and Frank, Eibe},
+  booktitle={Asian Conference on Machine Learning},
+  pages={1094--1109},
+  year={2019}
+}
+```
 
 Usage
 -----
