@@ -77,8 +77,14 @@ public class StochasticGradientTree extends AbstractClassifier {
     }
 
     private void buildPropositionalClassifier(Instances data) throws Exception {
+        if(data.classAttribute().isNumeric()) {
+            mObjective = new SquaredError();
+        }
+        else {
+            mObjective = new SoftmaxCrossEntropy();
+        }
+
         mFeatureInfo = createFeatureInfo(data);
-        mObjective = new SoftmaxCrossEntropy();
         StreamingGradientTreeOptions options = new StreamingGradientTreeOptions();
         options.gracePeriod = mBatchSize;
         options.lambda = mLambda;
@@ -165,6 +171,10 @@ public class StochasticGradientTree extends AbstractClassifier {
             double[] pred = new double[]{topScore};
             pred = mObjective.transfer(pred);
             return new double[]{pred[1], pred[0]};
+        }
+        else if(inst.classAttribute().isNumeric()) {
+            double[] pred = new double[]{mTree.predict(getFeatures(inst))};
+            return mObjective.transfer(pred);
         }
         else {
             double[] logit = new double[]{mTree.predict(getFeatures(inst))};
