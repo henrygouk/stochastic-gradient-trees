@@ -1,6 +1,8 @@
 Stochastic Gradient Trees
 =========================
 
+**See also: [a python implementation of SGTs in the river project](https://github.com/online-ml/river)**
+
 This repo contains an implementation of the techniques described in the paper [Stochastic Gradient Trees](https://arxiv.org/abs/1901.07777) by Henry Gouk, Bernhard Pfahringer, and Eibe Frank, and presented at ACML 2019. If you build on this work in your research please cite
 
 ```
